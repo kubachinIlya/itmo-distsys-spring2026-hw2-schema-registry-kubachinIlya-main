@@ -15,7 +15,7 @@ class SchemaRegistryService(schema_registry_pb2_grpc.SchemaRegistryServicer):
         self._registry: dict[str, list[Schema]] = {}
 
     def RegisterSchema(self, request, context): 
-        if not request.service_name:
+        if not request.service_name.strip():
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "service_name is empty")
         
         # 1. Валидация новой схемы
@@ -50,7 +50,7 @@ class SchemaRegistryService(schema_registry_pb2_grpc.SchemaRegistryServicer):
         )
 
     def CheckCompatibility(self, request, context):
-        if not request.service_name:
+        if not request.service_name.strip():
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "service_name is empty")
         
         versions = self._registry.get(request.service_name)
@@ -70,18 +70,28 @@ class SchemaRegistryService(schema_registry_pb2_grpc.SchemaRegistryServicer):
         )
 
     def GetSchema(self, request, context):
+        if not request.service_name.strip():
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "service_name is empty")
+        
         versions = self._registry.get(request.service_name)
         if versions is None:
             context.abort(grpc.StatusCode.NOT_FOUND, "service not found")
-        if request.version < 1 or request.version > len(versions):
+        
+        if request.version == 0:
+            # 0 = latest
+            version = len(versions)
+        elif request.version < 0 or request.version > len(versions):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid version")
+        else:
+            version = request.version
+        
         return schema_registry_pb2.GetSchemaResponse(
-            version=request.version,
-            schema=versions[request.version - 1],
+            version=version,
+            schema=versions[version - 1],
         )
 
     def GetLatestVersion(self, request, context):
-        if not request.service_name:
+        if not request.service_name.strip():
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "service_name is empty")
         if request.service_name not in self._registry:
             context.abort(grpc.StatusCode.NOT_FOUND, "service not found")
